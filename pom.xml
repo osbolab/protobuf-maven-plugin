@@ -1,6 +1,4 @@
-<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xmlns="http://maven.apache.org/POM/4.0.0"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <!-- We aren't distributing to sonatype yet
@@ -14,7 +12,7 @@
   <groupId>com.github.igorpetruk.protobuf</groupId>
   <artifactId>protobuf-maven-plugin</artifactId>
   <packaging>maven-plugin</packaging>
-  <version>0.7.0</version>
+  <version>0.7.1-SNAPSHOT</version>
   <name>Maven Protobuf Plugin</name>
   <description>Maven Plugin to compile Google Protobuf Messsage files</description>
   <url>http://igor-petruk.github.com/protobuf-maven-plugin/</url>
@@ -56,7 +54,7 @@
     <developerConnection>scm:git:ssh://git@github.com/osbolab/protobuf-maven-plugin.git
     </developerConnection>
     <url>https://github.com/osbolab/protobuf-maven-plugin</url>
-    <tag>protobuf-maven-plugin-0.7.0</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <issueManagement>
