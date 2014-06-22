@@ -14,20 +14,23 @@
  * limitations under the License.
  */
 
-package com.github.igor_petruk.protobuf.maven.plugin;
+package com.github.igorpetruk.protobuf.maven.plugin;
 
 import java.io.File;
 import java.io.FilenameFilter;
 
-public class ProtoFileFilter implements FilenameFilter{
-    String extension;
-    
-    public ProtoFileFilter(String extension) {
-        this.extension = extension;
-    }
+/**
+ * @author igor.petrouk@gmail.com (Igor Petrouk)
+ */
+public class ProtoFileFilter implements FilenameFilter {
+  String extension;
 
-    @Override
-    public boolean accept(File dir, String name) {
-        return name.endsWith(extension);
-    }
+  public ProtoFileFilter(String extension) {
+    this.extension = extension;
+  }
+
+  @Override
+  public boolean accept(File dir, String name) {
+    return name.endsWith(extension);
+  }
 }
