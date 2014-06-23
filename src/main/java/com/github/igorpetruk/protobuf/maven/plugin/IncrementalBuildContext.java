@@ -1,7 +1,5 @@
 package com.github.igorpetruk.protobuf.maven.plugin;
 
-import com.google.common.base.Charsets;
-
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
@@ -33,8 +31,8 @@ final class IncrementalBuildContext extends DefaultBuildContext {
 
   private static final Log log = new SystemStreamLog();
 
-  private static final String INFO_COMMENT = "Protobuf source file";
-  private static final String INFO_ENCODING = Charsets.UTF_8.name();
+  private static final String INFO_COMMENT =
+      "Protocol buffer source file\nIncremental build metadata";
   private static final String INFO_PATH_KEY = "file_abs_path";
   private static final String INFO_SIZE_KEY = "file_size";
   private static final String INFO_HASH_KEY = "file_hash";
@@ -46,8 +44,6 @@ final class IncrementalBuildContext extends DefaultBuildContext {
   private Path basePath;
 
   IncrementalBuildContext(Path metadataPath) {
-    this.basePath = basePath;
-
     if (metadataPath.isAbsolute()) {
       this.metadataPath = metadataPath;
     } else {
