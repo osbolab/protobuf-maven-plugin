@@ -43,7 +43,6 @@ final class IncrementalBuildContext extends DefaultBuildContext {
   private final MessageDigest refreshDigest = DigestUtils.getDigest(HASH_ALGORITHM);
 
   private static final String OUTPUT_NUMFILES_KEY = "num_output_files";
-  private static final String OUTPUT_FILE_PREFIX_KEY = ":/";
   private static final String OUTPUT_COMMENT =
       "Protocol buffer output files\nIncremental build metadata";
 
@@ -59,7 +58,8 @@ final class IncrementalBuildContext extends DefaultBuildContext {
   IncrementalBuildContext(File outputDirectory, Path metadataPath) {
     this.outputDirectory = outputDirectory;
     this.metadataPath = metadataPath;
-    outputInfoFile = metadataPath.resolve(outputDirectory.getName()).toFile();
+    String outputInfoFileName = DigestUtils.md5Hex(outputDirectory.getAbsolutePath());
+    outputInfoFile = metadataPath.resolve(outputInfoFileName).toFile();
   }
 
   @Override
@@ -165,13 +165,16 @@ final class IncrementalBuildContext extends DefaultBuildContext {
     }
     List<File> files = Lists.newArrayList();
     int numFiles = countFilesAndPutInList(outputDir, files);
+    log.info("Refreshing incremental build data for " + numFiles + " files.");
 
     Properties info = new Properties();
     info.setProperty(OUTPUT_NUMFILES_KEY, Integer.toString(numFiles));
 
+    String outputDirName = outputDir.getName() + ":";
+
     for (File file : files) {
       String fileHash = digestFile(file);
-      info.setProperty(OUTPUT_FILE_PREFIX_KEY + file.getName(), fileHash.toLowerCase());
+      info.setProperty(outputDirName + file.getName(), fileHash.toLowerCase());
     }
 
     try (Writer output = new FileWriter(outputInfoFile)) {
@@ -183,7 +186,15 @@ final class IncrementalBuildContext extends DefaultBuildContext {
   }
 
   boolean isOutputDirChanged() {
-
+    if (!outputInfoFile.exists()) {
+      return true;
+    }
+    if (!outputInfoFile.canRead()) {
+      if (!outputInfoFile.delete()) {
+        log.warn("Protobuf incremental build metadata is unreadable and can't be deleted.");
+      }
+      return true;
+    }
     Properties info = new Properties();
     try (Reader input = new FileReader(outputInfoFile)) {
       info.load(input);
@@ -220,6 +231,7 @@ final class IncrementalBuildContext extends DefaultBuildContext {
       return true;
     }
 
+    String outputDirName = outputDirectory.getName() + ":";
     for (File file : files) {
       digest.reset();
       try (InputStream input = new FileInputStream(file)) {
@@ -229,7 +241,7 @@ final class IncrementalBuildContext extends DefaultBuildContext {
         return true;
       }
       String fileHash = Hex.encodeHexString(digest.digest()).trim().toLowerCase();
-      if (!fileHash.equals(info.getProperty(OUTPUT_FILE_PREFIX_KEY + file.getName(), ""))) {
+      if (!fileHash.equals(info.getProperty(outputDirName + file.getName(), ""))) {
         return true;
       }
     }
@@ -239,6 +251,9 @@ final class IncrementalBuildContext extends DefaultBuildContext {
 
   private int countFilesAndPutInList(File directory, List<File> addTo) {
     int filesFound = 0;
+    if (directory.getAbsolutePath().startsWith(metadataPath.toString())) {
+      return 0;
+    }
     File[] files = directory.listFiles();
     if (files != null) {
       for (File file : files) {
