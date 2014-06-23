@@ -31,9 +31,12 @@ import org.apache.maven.shared.dependency.tree.DependencyTreeBuilder;
 import org.apache.maven.shared.dependency.tree.DependencyTreeBuilderException;
 import org.codehaus.plexus.util.FileUtils;
 import org.sonatype.plexus.build.incremental.BuildContext;
+import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.Scanner;
@@ -54,7 +57,7 @@ public class RunMojo extends AbstractMojo {
   /**
    * The Maven project.
    *
-   * @parameter property="includeDirectories"
+   * @parameter property="project"
    * @required
    * @readonly
    */
@@ -63,7 +66,7 @@ public class RunMojo extends AbstractMojo {
   /**
    * The artifact repository to use.
    *
-   * @parameter property="includeDirectories"
+   * @parameter property="localRepository"
    * @required
    * @readonly
    */
@@ -106,6 +109,11 @@ public class RunMojo extends AbstractMojo {
   private DependencyTreeBuilder dependencyTreeBuilder;
 
   /**
+   * The Plexus {@code BuildContext} component is part of a plugin API that facilitates
+   * communication between plugins and the IDE. This is supposed to be injected by M2E under
+   * eclipse which provides information like source staleness. If not injected this defaults to a
+   * context that forces compilation, which is undesirable in maven without eclipse.
+   *
    * @component
    */
   private BuildContext buildContext;
@@ -114,7 +122,7 @@ public class RunMojo extends AbstractMojo {
    * Input directories that have *.protoc files (or the configured extension).
    * If none specified then <b>src/main/protobuf</b> is used.
    *
-   * @parameter property="includeDirectories"
+   * @parameter property="inputDirectories"
    */
   private File[] inputDirectories;
 
@@ -197,6 +205,7 @@ public class RunMojo extends AbstractMojo {
    * @parameter property="protobufArtifactId" default-value="protobuf-java"
    */
   private String protobufArtifactId;
+
   public RunMojo() {}
 
   public void execute() throws MojoExecutionException {
@@ -233,6 +242,27 @@ public class RunMojo extends AbstractMojo {
       String subdir = "generated-" + ("test".equals(addSources) ? "test-" : "") + "sources";
       outputDirectory =
           new File(project.getBuild().getDirectory() + File.separator + subdir + File.separator);
+    }
+
+    // Enable incremental compilation outside of eclipse
+    if (buildContext == null || buildContext instanceof DefaultBuildContext) {
+      File metadataDir = Paths.get(outputDirectory.getAbsolutePath(), ".incremental").toFile();
+      try {
+        if (!metadataDir.isDirectory() || !metadataDir.canWrite() || !metadataDir.canRead()) {
+          FileUtils.deleteDirectory(metadataDir);
+        }
+        if (!metadataDir.exists()) {
+          if (!metadataDir.mkdirs()) {
+            throw new IOException("Can't make metadata directory.");
+          }
+        }
+      } catch (IOException e) {
+        getLog().warn(
+            "Incremental build directory is unusable; protobuf sources will be rebuilt.", e);
+        buildContext = new DefaultBuildContext();
+      }
+
+      buildContext = new IncrementalBuildContext(metadataDir.toPath());
     }
 
     performProtoCompilation();
@@ -279,6 +309,10 @@ public class RunMojo extends AbstractMojo {
       }
       getLog().info("Directory " + input);
       if (input.exists() && input.isDirectory()) {
+        if (buildContext instanceof IncrementalBuildContext) {
+          Path basePath = Paths.get(FileUtils.dirname(input.getAbsolutePath()));
+          ((IncrementalBuildContext) buildContext).setWorkingDirectory(basePath);
+        }
         File[] files = input.listFiles(protoFilter);
         for (File file : files) {
           if (cleanOutputFolder || buildContext.hasDelta(file.getPath())) {
