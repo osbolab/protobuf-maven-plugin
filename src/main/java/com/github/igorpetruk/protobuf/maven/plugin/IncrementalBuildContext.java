@@ -1,5 +1,7 @@
 package com.github.igorpetruk.protobuf.maven.plugin;
 
+import com.google.common.collect.Lists;
+
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
@@ -36,19 +38,28 @@ final class IncrementalBuildContext extends DefaultBuildContext {
   private static final String INFO_PATH_KEY = "file_abs_path";
   private static final String INFO_SIZE_KEY = "file_size";
   private static final String INFO_HASH_KEY = "file_hash";
-  private static final String INFO_HASH_ALGO_KEY = "hash_algorithm";
 
   private static final String HASH_ALGORITHM = "MD5";
   private final MessageDigest refreshDigest = DigestUtils.getDigest(HASH_ALGORITHM);
+
+  private static final String OUTPUT_NUMFILES_KEY = "num_output_files";
+  private static final String OUTPUT_COMMENT =
+      "Protocol buffer output files\nIncremental build metadata";
+
+  private static final String INFO_HASH_ALGO_KEY = "hash_algorithm";
+
+
+  private final File outputDirectory;
+  private final File outputInfoFile;
   private final Path metadataPath;
   private Path basePath;
 
-  IncrementalBuildContext(Path metadataPath) {
-    if (metadataPath.isAbsolute()) {
-      this.metadataPath = metadataPath;
-    } else {
-      this.metadataPath = basePath.resolve(metadataPath);
-    }
+
+  IncrementalBuildContext(File outputDirectory, Path metadataPath) {
+    this.outputDirectory = outputDirectory;
+    this.metadataPath = metadataPath;
+    String outputInfoFileName = DigestUtils.md5Hex(outputDirectory.getAbsolutePath());
+    outputInfoFile = metadataPath.resolve(outputInfoFileName).toFile();
   }
 
   @Override
@@ -58,17 +69,22 @@ final class IncrementalBuildContext extends DefaultBuildContext {
 
   @Override
   public boolean hasDelta(String relpath) {
-    Path path = basePath.resolve(relpath);
-    return hasDelta(path.toFile());
+    if (basePath != null) {
+      Path path = basePath.resolve(relpath);
+      return hasDelta(path.toFile());
+    }
+    return false;
   }
 
   @Override
   public boolean hasDelta(List relpaths) {
-    for (Object relpath : relpaths) {
-      if (relpath instanceof String) {
-        Path path = basePath.resolve((String) relpath);
-        if (hasDelta(path.toFile())) {
-          return true;
+    if (basePath != null) {
+      for (Object relpath : relpaths) {
+        if (relpath instanceof String) {
+          Path path = basePath.resolve((String) relpath);
+          if (hasDelta(path.toFile())) {
+            return true;
+          }
         }
       }
     }
@@ -124,13 +140,132 @@ final class IncrementalBuildContext extends DefaultBuildContext {
       info.load(input);
 
     } catch (IOException e) {
-      FileUtils.deleteQuietly(infoFile);
       log.warn("Protobuf incremental build metadata is unreadable; forcing compilation of " +
                file.toString(), e);
+      FileUtils.deleteQuietly(infoFile);
       return true;
     }
 
     return pathMismatch(info, file) || sizeMismatch(info, file) || hashMismatch(info, file);
+  }
+
+  void refreshOutputDir(File outputDir) {
+    try {
+      if (!outputInfoFile.createNewFile()) {
+        if (!outputInfoFile.delete()) {
+          throw new IOException("Can't delete metadata file.");
+        } else {
+          if (!outputInfoFile.createNewFile()) {
+            throw new IOException("Can't create metadata file.");
+          }
+        }
+      }
+    } catch (IOException e) {
+      throw new RuntimeException("Can't update output files metadata.", e);
+    }
+    List<File> files = Lists.newArrayList();
+    int numFiles = countFilesAndPutInList(outputDir, files);
+    log.info("Refreshing incremental build data for " + numFiles + " files.");
+
+    Properties info = new Properties();
+    info.setProperty(OUTPUT_NUMFILES_KEY, Integer.toString(numFiles));
+
+    String outputDirName = outputDir.getName() + ":";
+
+    for (File file : files) {
+      String fileHash = digestFile(file);
+      info.setProperty(outputDirName + file.getName(), fileHash.toLowerCase());
+    }
+
+    try (Writer output = new FileWriter(outputInfoFile)) {
+      info.store(output, OUTPUT_COMMENT);
+    } catch (IOException storeEx) {
+      throw new RuntimeException(
+          "Exception writing incremental build metadata for protobuf output files.", storeEx);
+    }
+  }
+
+  boolean isOutputDirChanged() {
+    if (!outputInfoFile.exists()) {
+      return true;
+    }
+    if (!outputInfoFile.canRead()) {
+      if (!outputInfoFile.delete()) {
+        log.warn("Protobuf incremental build metadata is unreadable and can't be deleted.");
+      }
+      return true;
+    }
+    Properties info = new Properties();
+    try (Reader input = new FileReader(outputInfoFile)) {
+      info.load(input);
+
+    } catch (IOException e) {
+      log.warn("Protobuf incremental build metadata is unreadable; forcing compilation.", e);
+      FileUtils.deleteQuietly(outputInfoFile);
+      return true;
+    }
+
+    int numFiles = -1;
+    try {
+      numFiles = Integer.parseInt(info.getProperty(OUTPUT_NUMFILES_KEY));
+    } catch (NumberFormatException e) {
+      log.warn("Protobuf incremental build metadata is missing output file count.", e);
+    }
+
+    if (numFiles < 0) {
+      return true;
+    }
+
+    List<File> files = Lists.newArrayList();
+    if (numFiles != countFilesAndPutInList(outputDirectory, files)) {
+      return true;
+    }
+
+    String hashUsed = info.getProperty(INFO_HASH_ALGO_KEY, "").trim().toLowerCase();
+
+    MessageDigest digest;
+    try {
+      digest = MessageDigest.getInstance(hashUsed);
+    } catch (NoSuchAlgorithmException e) {
+      log.warn("Protobuf incremental build metadata used hash algorithm I don't recognize.");
+      return true;
+    }
+
+    String outputDirName = outputDirectory.getName() + ":";
+    for (File file : files) {
+      digest.reset();
+      try (InputStream input = new FileInputStream(file)) {
+        DigestUtils.updateDigest(digest, input);
+      } catch (IOException e) {
+        log.warn("Exception getting output directory hash. Compilation will be forced.", e);
+        return true;
+      }
+      String fileHash = Hex.encodeHexString(digest.digest()).trim().toLowerCase();
+      if (!fileHash.equals(info.getProperty(outputDirName + file.getName(), ""))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private int countFilesAndPutInList(File directory, List<File> addTo) {
+    int filesFound = 0;
+    if (directory.getAbsolutePath().startsWith(metadataPath.toString())) {
+      return 0;
+    }
+    File[] files = directory.listFiles();
+    if (files != null) {
+      for (File file : files) {
+        if (file.isDirectory()) {
+          filesFound += countFilesAndPutInList(file, addTo);
+        } else {
+          ++filesFound;
+          addTo.add(file);
+        }
+      }
+    }
+    return filesFound;
   }
 
   void setWorkingDirectory(Path path) {

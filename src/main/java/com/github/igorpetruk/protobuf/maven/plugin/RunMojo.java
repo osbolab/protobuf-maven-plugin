@@ -35,7 +35,6 @@ import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -265,16 +264,16 @@ public class RunMojo extends AbstractMojo {
     }
 
     getLog().info("Output directory: " + outputDirectory);
-    File f = outputDirectory;
-    if (!f.exists()) {
-      getLog().info(f + " does not exist. Creating...");
+    File outputDir = outputDirectory;
+    if (!outputDir.exists()) {
+      getLog().info(outputDir + " does not exist. Creating...");
       //noinspection ResultOfMethodCallIgnored
-      f.mkdirs();
+      outputDir.mkdirs();
     }
     if (cleanOutputFolder) {
       try {
-        getLog().info("Cleaning " + f);
-        FileUtils.cleanDirectory(f);
+        getLog().info("Cleaning " + outputDir);
+        FileUtils.cleanDirectory(outputDir);
       } catch (IOException e) {
         throw new MojoExecutionException("Exception cleaning protobuf output directory.", e);
       }
@@ -301,8 +300,14 @@ public class RunMojo extends AbstractMojo {
         buildContext = new DefaultBuildContext();
       }
 
-      buildContext = new IncrementalBuildContext(metadataDir.toPath());
-      getLog().info("Doing incremental builds in " + metadataDir.toString());
+      IncrementalBuildContext ctx = new IncrementalBuildContext(outputDir, metadataDir.toPath());
+      if (ctx.isOutputDirChanged()) {
+        cleanOutputFolder = true;
+        getLog().info("Changes detected in output directory. Sources will be rebuilt. ");
+      } else {
+        getLog().info("Building sources incrementally.");
+      }
+      buildContext = ctx;
     }
 
     final ProtoFileFilter protoFilter = new ProtoFileFilter(extension);
@@ -313,10 +318,6 @@ public class RunMojo extends AbstractMojo {
       }
       getLog().info("Directory " + input);
       if (input.exists() && input.isDirectory()) {
-        if (buildContext instanceof IncrementalBuildContext) {
-          Path basePath = Paths.get(FileUtils.dirname(input.getAbsolutePath()));
-          ((IncrementalBuildContext) buildContext).setWorkingDirectory(basePath);
-        }
         File[] files = input.listFiles(protoFilter);
         for (File file : files) {
           if (cleanOutputFolder || buildContext.hasDelta(file)) {
@@ -342,6 +343,9 @@ public class RunMojo extends AbstractMojo {
     if (testAddSources) {
       getLog().info("Adding generated classes to test classpath");
       project.addTestCompileSourceRoot(outputDirectory.getAbsolutePath());
+    }
+    if (buildContext instanceof IncrementalBuildContext) {
+      ((IncrementalBuildContext) buildContext).refreshOutputDir(outputDirectory);
     }
   }
 
