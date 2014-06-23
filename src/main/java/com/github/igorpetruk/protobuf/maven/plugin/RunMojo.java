@@ -35,7 +35,6 @@ import org.sonatype.plexus.build.incremental.DefaultBuildContext;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -166,7 +165,7 @@ public class RunMojo extends AbstractMojo {
    *
    * @parameter property="outputDirectory"
    */
-  private File outputPath;
+  private File outputDirectory;
 
   /**
    * Default extension for protobuf files.
@@ -238,9 +237,9 @@ public class RunMojo extends AbstractMojo {
       addSources = "main";
     }
 
-    if (outputPath == null) {
+    if (outputDirectory == null) {
       String subdir = "generated-" + ("test".equals(addSources) ? "test-" : "") + "sources";
-      outputPath =
+      outputDirectory =
           new File(project.getBuild().getDirectory() + File.separator + subdir + File.separator);
     }
 
@@ -264,8 +263,8 @@ public class RunMojo extends AbstractMojo {
       inputDirectories = new File[]{ inputDir };
     }
 
-    getLog().info("Output directory: " + outputPath);
-    File outputDir = outputPath;
+    getLog().info("Output directory: " + outputDirectory);
+    File outputDir = outputDirectory;
     if (!outputDir.exists()) {
       getLog().info(outputDir + " does not exist. Creating...");
       //noinspection ResultOfMethodCallIgnored
@@ -282,7 +281,7 @@ public class RunMojo extends AbstractMojo {
 
     // Enable incremental compilation outside of eclipse
     if (buildContext == null || buildContext instanceof DefaultBuildContext) {
-      File metadataDir = Paths.get(outputPath.getAbsolutePath(), ".incremental").toFile();
+      File metadataDir = Paths.get(outputDirectory.getAbsolutePath(), ".incremental").toFile();
       try {
         if (metadataDir.exists() &&
             (!metadataDir.isDirectory() || !metadataDir.canWrite() || !metadataDir.canRead())) {
@@ -306,9 +305,9 @@ public class RunMojo extends AbstractMojo {
         cleanOutputFolder = true;
         getLog().info("Changes detected in output directory. Sources will be rebuilt. ");
       } else {
-        buildContext = ctx;
         getLog().info("Building sources incrementally.");
       }
+      buildContext = ctx;
     }
 
     final ProtoFileFilter protoFilter = new ProtoFileFilter(extension);
@@ -319,14 +318,10 @@ public class RunMojo extends AbstractMojo {
       }
       getLog().info("Directory " + input);
       if (input.exists() && input.isDirectory()) {
-        if (!cleanOutputFolder && buildContext instanceof IncrementalBuildContext) {
-          Path basePath = Paths.get(FileUtils.dirname(input.getAbsolutePath()));
-          ((IncrementalBuildContext) buildContext).setWorkingDirectory(basePath);
-        }
         File[] files = input.listFiles(protoFilter);
         for (File file : files) {
           if (cleanOutputFolder || buildContext.hasDelta(file)) {
-            processFile(file, outputPath);
+            processFile(file, outputDirectory);
           } else {
             getLog().info("Not changed " + file);
           }
@@ -343,14 +338,14 @@ public class RunMojo extends AbstractMojo {
     boolean testAddSources = "test".endsWith(addSources);
     if (mainAddSources) {
       getLog().info("Adding generated classes to classpath");
-      project.addCompileSourceRoot(outputPath.getAbsolutePath());
+      project.addCompileSourceRoot(outputDirectory.getAbsolutePath());
     }
     if (testAddSources) {
       getLog().info("Adding generated classes to test classpath");
-      project.addTestCompileSourceRoot(outputPath.getAbsolutePath());
+      project.addTestCompileSourceRoot(outputDirectory.getAbsolutePath());
     }
     if (buildContext instanceof IncrementalBuildContext) {
-      ((IncrementalBuildContext) buildContext).refreshOutputDir(outputPath);
+      ((IncrementalBuildContext) buildContext).refreshOutputDir(outputDirectory);
     }
   }
 
