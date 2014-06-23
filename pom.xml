@@ -12,7 +12,7 @@
   <groupId>com.github.igorpetruk.protobuf</groupId>
   <artifactId>protobuf-maven-plugin</artifactId>
   <packaging>maven-plugin</packaging>
-  <version>0.8.0</version>
+  <version>0.8.1-SNAPSHOT</version>
   <name>Maven Protobuf Plugin</name>
   <description>Maven Plugin to compile Google Protobuf Messsage files</description>
   <url>http://igor-petruk.github.com/protobuf-maven-plugin/</url>
@@ -57,7 +57,7 @@
     <developerConnection>scm:git:ssh://git@github.com/osbolab/protobuf-maven-plugin.git
     </developerConnection>
     <url>https://github.com/osbolab/protobuf-maven-plugin</url>
-    <tag>protobuf-maven-plugin-0.8.0</tag>
+    <tag>HEAD</tag>
   </scm>
 
   <issueManagement>
