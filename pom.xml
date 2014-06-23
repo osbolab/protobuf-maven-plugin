@@ -1,4 +1,6 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
   <!-- We aren't distributing to sonatype yet
@@ -12,7 +14,7 @@
   <groupId>com.github.igorpetruk.protobuf</groupId>
   <artifactId>protobuf-maven-plugin</artifactId>
   <packaging>maven-plugin</packaging>
-  <version>0.8.1-SNAPSHOT</version>
+  <version>0.9.0-SNAPSHOT</version>
   <name>Maven Protobuf Plugin</name>
   <description>Maven Plugin to compile Google Protobuf Messsage files</description>
   <url>http://igor-petruk.github.com/protobuf-maven-plugin/</url>
@@ -23,8 +25,7 @@
     <project.java.targetCompatibility>1.7</project.java.targetCompatibility>
     <nexus.id>ying</nexus.id>
     <nexus.description>Ying Lab Nexus</nexus.description>
-    <nexus.root.url>http://nexus.osbolab.com/content/repositories
-    </nexus.root.url>
+    <nexus.root.url>http://nexus.osbolab.com/content/repositories</nexus.root.url>
   </properties>
 
   <prerequisites>
@@ -192,6 +193,16 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-site-plugin</artifactId>
         <version>3.3</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <version>2.2.1</version>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>2.9.1</version>
       </plugin>
       <plugin>
         <groupId>com.github.github</groupId>

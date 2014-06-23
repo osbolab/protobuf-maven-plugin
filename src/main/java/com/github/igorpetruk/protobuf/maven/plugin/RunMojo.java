@@ -166,7 +166,7 @@ public class RunMojo extends AbstractMojo {
    *
    * @parameter property="outputDirectory"
    */
-  private File outputDirectory;
+  private File outputPath;
 
   /**
    * Default extension for protobuf files.
@@ -238,9 +238,9 @@ public class RunMojo extends AbstractMojo {
       addSources = "main";
     }
 
-    if (outputDirectory == null) {
+    if (outputPath == null) {
       String subdir = "generated-" + ("test".equals(addSources) ? "test-" : "") + "sources";
-      outputDirectory =
+      outputPath =
           new File(project.getBuild().getDirectory() + File.separator + subdir + File.separator);
     }
 
@@ -264,17 +264,17 @@ public class RunMojo extends AbstractMojo {
       inputDirectories = new File[]{ inputDir };
     }
 
-    getLog().info("Output directory: " + outputDirectory);
-    File f = outputDirectory;
-    if (!f.exists()) {
-      getLog().info(f + " does not exist. Creating...");
+    getLog().info("Output directory: " + outputPath);
+    File outputDir = outputPath;
+    if (!outputDir.exists()) {
+      getLog().info(outputDir + " does not exist. Creating...");
       //noinspection ResultOfMethodCallIgnored
-      f.mkdirs();
+      outputDir.mkdirs();
     }
     if (cleanOutputFolder) {
       try {
-        getLog().info("Cleaning " + f);
-        FileUtils.cleanDirectory(f);
+        getLog().info("Cleaning " + outputDir);
+        FileUtils.cleanDirectory(outputDir);
       } catch (IOException e) {
         throw new MojoExecutionException("Exception cleaning protobuf output directory.", e);
       }
@@ -282,7 +282,7 @@ public class RunMojo extends AbstractMojo {
 
     // Enable incremental compilation outside of eclipse
     if (buildContext == null || buildContext instanceof DefaultBuildContext) {
-      File metadataDir = Paths.get(outputDirectory.getAbsolutePath(), ".incremental").toFile();
+      File metadataDir = Paths.get(outputPath.getAbsolutePath(), ".incremental").toFile();
       try {
         if (metadataDir.exists() &&
             (!metadataDir.isDirectory() || !metadataDir.canWrite() || !metadataDir.canRead())) {
@@ -301,8 +301,14 @@ public class RunMojo extends AbstractMojo {
         buildContext = new DefaultBuildContext();
       }
 
-      buildContext = new IncrementalBuildContext(metadataDir.toPath());
-      getLog().info("Doing incremental builds in " + metadataDir.toString());
+      IncrementalBuildContext ctx = new IncrementalBuildContext(outputDir, metadataDir.toPath());
+      if (ctx.isOutputDirChanged()) {
+        cleanOutputFolder = true;
+        getLog().info("Changes detected in output directory. Sources will be rebuilt. ");
+      } else {
+        buildContext = ctx;
+        getLog().info("Building sources incrementally.");
+      }
     }
 
     final ProtoFileFilter protoFilter = new ProtoFileFilter(extension);
@@ -313,14 +319,14 @@ public class RunMojo extends AbstractMojo {
       }
       getLog().info("Directory " + input);
       if (input.exists() && input.isDirectory()) {
-        if (buildContext instanceof IncrementalBuildContext) {
+        if (!cleanOutputFolder && buildContext instanceof IncrementalBuildContext) {
           Path basePath = Paths.get(FileUtils.dirname(input.getAbsolutePath()));
           ((IncrementalBuildContext) buildContext).setWorkingDirectory(basePath);
         }
         File[] files = input.listFiles(protoFilter);
         for (File file : files) {
           if (cleanOutputFolder || buildContext.hasDelta(file)) {
-            processFile(file, outputDirectory);
+            processFile(file, outputPath);
           } else {
             getLog().info("Not changed " + file);
           }
@@ -337,11 +343,14 @@ public class RunMojo extends AbstractMojo {
     boolean testAddSources = "test".endsWith(addSources);
     if (mainAddSources) {
       getLog().info("Adding generated classes to classpath");
-      project.addCompileSourceRoot(outputDirectory.getAbsolutePath());
+      project.addCompileSourceRoot(outputPath.getAbsolutePath());
     }
     if (testAddSources) {
       getLog().info("Adding generated classes to test classpath");
-      project.addTestCompileSourceRoot(outputDirectory.getAbsolutePath());
+      project.addTestCompileSourceRoot(outputPath.getAbsolutePath());
+    }
+    if (buildContext instanceof IncrementalBuildContext) {
+      ((IncrementalBuildContext) buildContext).refreshOutputDir(outputPath);
     }
   }
 
