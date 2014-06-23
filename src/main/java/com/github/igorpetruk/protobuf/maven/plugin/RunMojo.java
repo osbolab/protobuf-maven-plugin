@@ -244,27 +244,6 @@ public class RunMojo extends AbstractMojo {
           new File(project.getBuild().getDirectory() + File.separator + subdir + File.separator);
     }
 
-    // Enable incremental compilation outside of eclipse
-    if (buildContext == null || buildContext instanceof DefaultBuildContext) {
-      File metadataDir = Paths.get(outputDirectory.getAbsolutePath(), ".incremental").toFile();
-      try {
-        if (!metadataDir.isDirectory() || !metadataDir.canWrite() || !metadataDir.canRead()) {
-          FileUtils.deleteDirectory(metadataDir);
-        }
-        if (!metadataDir.exists()) {
-          if (!metadataDir.mkdirs()) {
-            throw new IOException("Can't make metadata directory.");
-          }
-        }
-      } catch (IOException e) {
-        getLog().warn(
-            "Incremental build directory is unusable; protobuf sources will be rebuilt.", e);
-        buildContext = new DefaultBuildContext();
-      }
-
-      buildContext = new IncrementalBuildContext(metadataDir.toPath());
-    }
-
     performProtoCompilation();
   }
 
@@ -297,8 +276,33 @@ public class RunMojo extends AbstractMojo {
         getLog().info("Cleaning " + f);
         FileUtils.cleanDirectory(f);
       } catch (IOException e) {
-        e.printStackTrace();
+        throw new MojoExecutionException("Exception cleaning protobuf output directory.", e);
       }
+    }
+
+    // Enable incremental compilation outside of eclipse
+    if (buildContext == null || buildContext instanceof DefaultBuildContext) {
+      File metadataDir = Paths.get(outputDirectory.getAbsolutePath(), ".incremental").toFile();
+      try {
+        if (metadataDir.exists() &&
+            (!metadataDir.isDirectory() || !metadataDir.canWrite() || !metadataDir.canRead())) {
+          if (!metadataDir.delete()) {
+            throw new IOException("Can't delete unusable metadata directory.");
+          }
+        }
+        if (!metadataDir.exists()) {
+          if (!metadataDir.mkdirs()) {
+            throw new IOException("Can't make metadata directory.");
+          }
+        }
+      } catch (IOException e) {
+        getLog().warn(
+            "Incremental build directory is unusable; protobuf sources will be rebuilt.", e);
+        buildContext = new DefaultBuildContext();
+      }
+
+      buildContext = new IncrementalBuildContext(metadataDir.toPath());
+      getLog().info("Doing incremental builds in " + metadataDir.toString());
     }
 
     final ProtoFileFilter protoFilter = new ProtoFileFilter(extension);
@@ -315,7 +319,7 @@ public class RunMojo extends AbstractMojo {
         }
         File[] files = input.listFiles(protoFilter);
         for (File file : files) {
-          if (cleanOutputFolder || buildContext.hasDelta(file.getPath())) {
+          if (cleanOutputFolder || buildContext.hasDelta(file)) {
             processFile(file, outputDirectory);
           } else {
             getLog().info("Not changed " + file);
@@ -339,9 +343,6 @@ public class RunMojo extends AbstractMojo {
       getLog().info("Adding generated classes to test classpath");
       project.addTestCompileSourceRoot(outputDirectory.getAbsolutePath());
     }
-    if (mainAddSources || testAddSources) {
-      buildContext.refresh(outputDirectory);
-    }
   }
 
   private void processFile(File file, File outputDir) throws MojoExecutionException {
@@ -358,6 +359,8 @@ public class RunMojo extends AbstractMojo {
     } catch (IOException e) {
       throw new MojoExecutionException("Unable to execute protoc for " + file, e);
     }
+
+    buildContext.refresh(file);
   }
 
   private Collection<String> buildCommand(File file, File outputDir) throws MojoExecutionException {
